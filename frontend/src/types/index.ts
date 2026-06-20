@@ -69,6 +69,7 @@ export interface TestCaseGroup {
   id: string
   name: string
   description?: string
+  pattern: string
   testCases: TestCase[]
 }
 

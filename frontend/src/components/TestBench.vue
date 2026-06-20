@@ -81,6 +81,9 @@
                 </span>
               </span>
             </div>
+            <div v-if="group.pattern" class="text-[10px] font-mono text-slate-600 mt-1 truncate" :title="group.pattern">
+              {{ group.pattern }}
+            </div>
           </div>
           <div v-if="testCasesStore.groups.length === 0" class="px-3 py-4 text-center text-xs text-slate-500">
             暂无分组，点击 + 创建
@@ -90,13 +93,18 @@
 
       <div class="flex-1 flex flex-col">
         <div class="px-3 py-2 border-b border-slate-700 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="text-xs font-bold text-slate-400">
-              {{ testCasesStore.selectedGroup?.name || '请选择分组' }}
-            </span>
-            <span v-if="testCasesStore.selectedGroup" class="text-xs text-slate-500">
-              {{ testCasesStore.selectedGroup.description }}
-            </span>
+          <div class="flex-1">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-bold text-slate-400">
+                {{ testCasesStore.selectedGroup?.name || '请选择分组' }}
+              </span>
+              <span v-if="testCasesStore.selectedGroup" class="text-xs text-slate-500">
+                {{ testCasesStore.selectedGroup.description }}
+              </span>
+            </div>
+            <div v-if="testCasesStore.selectedGroup?.pattern" class="text-[10px] font-mono text-cyan-500 mt-1 truncate" :title="testCasesStore.selectedGroup.pattern">
+              {{ testCasesStore.selectedGroup.pattern }}
+            </div>
           </div>
           <button
             v-if="testCasesStore.selectedGroup"
@@ -311,6 +319,15 @@
               placeholder="输入分组描述..."
             ></textarea>
           </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">正则表达式</label>
+            <input
+              v-model="groupForm.pattern"
+              type="text"
+              class="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-sm font-mono text-slate-200 focus:outline-none focus:border-cyan-500"
+              placeholder="输入正则表达式，如：^\\d{4}-\\d{2}-\\d{2}$"
+            />
+          </div>
         </div>
         <div class="flex justify-end gap-2 mt-4">
           <button
@@ -433,7 +450,8 @@ const editingTestCase = ref<TestCase | null>(null)
 
 const groupForm = ref({
   name: '',
-  description: ''
+  description: '',
+  pattern: ''
 })
 
 const testCaseForm = ref({
@@ -473,7 +491,7 @@ function getGroupPassRate(groupId: string): number | null {
 
 function openAddGroupModal() {
   editingGroup.value = null
-  groupForm.value = { name: '', description: '' }
+  groupForm.value = { name: '', description: '', pattern: '' }
   showGroupModal.value = true
 }
 
@@ -481,7 +499,8 @@ function openEditGroupModal(group: TestCaseGroup) {
   editingGroup.value = group
   groupForm.value = {
     name: group.name,
-    description: group.description || ''
+    description: group.description || '',
+    pattern: group.pattern || ''
   }
   showGroupModal.value = true
 }
@@ -498,12 +517,14 @@ function saveGroup() {
     testCasesStore.updateGroup(
       editingGroup.value.id,
       groupForm.value.name.trim(),
-      groupForm.value.description.trim() || undefined
+      groupForm.value.description.trim() || undefined,
+      groupForm.value.pattern.trim()
     )
   } else {
     testCasesStore.addGroup(
       groupForm.value.name.trim(),
-      groupForm.value.description.trim() || undefined
+      groupForm.value.description.trim() || undefined,
+      groupForm.value.pattern.trim()
     )
   }
 
@@ -580,12 +601,12 @@ function confirmDeleteTestCase(testCase: TestCase) {
 }
 
 async function runAllTests() {
-  await testCasesStore.runAllTests(regexStore.pattern)
+  await testCasesStore.runAllTests()
 }
 
 async function runSelectedGroupTests() {
   if (!testCasesStore.selectedGroupId) return
-  await testCasesStore.runGroupTests(regexStore.pattern, testCasesStore.selectedGroupId)
+  await testCasesStore.runGroupTests(testCasesStore.selectedGroupId)
 }
 
 function scrollToTestCase(testCaseId: string) {

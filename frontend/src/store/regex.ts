@@ -58,6 +58,28 @@ export function buildNFA(pattern: string): { states: StateNode[]; startState: nu
     states[from].epsilonTransitions.push(to)
   }
 
+  function copyTransitions(from: number, to: number) {
+    for (const [sym, targets] of states[from].transitions) {
+      states[to].transitions.set(sym, [...targets])
+    }
+    if ((states[from] as any)._matcher) {
+      (states[to] as any)._matcher = (states[from] as any)._matcher
+    }
+  }
+
+  function copyAtomicSegment(fromStart: number, fromEnd: number): [number, number] {
+    const newStart = newState()
+    const newEnd = newState()
+    for (const [sym, targets] of states[fromStart].transitions) {
+      states[newStart].transitions.set(sym, [newEnd])
+    }
+    if ((states[fromStart] as any)._matcher) {
+      (states[newStart] as any)._matcher = (states[fromStart] as any)._matcher
+      addEpsilon(newStart, newEnd)
+    }
+    return [newStart, newEnd]
+  }
+
   function parseCharClass(): (ch: string) => boolean {
     const negative = pattern[pos] === '^'
     if (negative) pos++
@@ -106,7 +128,7 @@ export function buildNFA(pattern: string): { states: StateNode[]; startState: nu
         segEnd = newState()
         const matcher = parseCharClass()
         addTransition(segStart, '__class_' + segStart, segEnd)
-        ;(states[segEnd] as any)._matcher = matcher
+        ;(states[segStart] as any)._matcher = matcher
       } else if (ch === '.') {
         segStart = newState()
         segEnd = newState()
@@ -124,7 +146,8 @@ export function buildNFA(pattern: string): { states: StateNode[]; startState: nu
         pos++
       } else if (ch === '^' || ch === '$') {
         segStart = newState()
-        segEnd = segStart
+        segEnd = newState()
+        addTransition(segStart, ch === '^' ? '__anchor_start' : '__anchor_end', segEnd)
         pos++
       } else {
         segStart = newState()
@@ -136,19 +159,82 @@ export function buildNFA(pattern: string): { states: StateNode[]; startState: nu
       // Handle quantifiers
       while (pos < pattern.length && ['*', '+', '?', '{'].includes(pattern[pos])) {
         const q = pattern[pos]
+        let min = 0, max = Infinity
         if (q === '{') {
-          while (pos < pattern.length && pattern[pos] !== '}') pos++
           pos++
+          let numStr = ''
+          while (pos < pattern.length && pattern[pos] !== '}' && pattern[pos] !== ',') {
+            numStr += pattern[pos]
+            pos++
+          }
+          min = parseInt(numStr) || 0
+          if (pattern[pos] === ',') {
+            pos++
+            if (pattern[pos] === '}') {
+              max = Infinity
+            } else {
+              numStr = ''
+              while (pos < pattern.length && pattern[pos] !== '}') {
+                numStr += pattern[pos]
+                pos++
+              }
+              max = parseInt(numStr) || Infinity
+            }
+          } else {
+            max = min
+          }
+          pos++ // skip }
         } else {
           pos++
+          if (q === '*') { min = 0; max = Infinity }
+          else if (q === '+') { min = 1; max = Infinity }
+          else if (q === '?') { min = 0; max = 1 }
         }
-        const qStart = newState()
-        const qEnd = newState()
-        addEpsilon(qStart, segStart)
-        if (q === '*') { addEpsilon(qStart, qEnd); addEpsilon(segEnd, qEnd); addEpsilon(segEnd, segStart) }
-        else if (q === '+') { addEpsilon(segEnd, qEnd); addEpsilon(segEnd, segStart) }
-        else if (q === '?') { addEpsilon(qStart, qEnd); addEpsilon(segEnd, qEnd) }
-        segStart = qStart; segEnd = qEnd
+
+        const origSegStart = segStart
+        const origSegEnd = segEnd
+
+        let currentEnd = segEnd
+
+        if (min > 0) {
+          for (let i = 1; i < min; i++) {
+            const [copyStart, copyEnd] = copyAtomicSegment(origSegStart, origSegEnd)
+            addEpsilon(currentEnd, copyStart)
+            currentEnd = copyEnd
+          }
+        }
+
+        if (max === Infinity) {
+          const loopStart = newState()
+          const loopEnd = newState()
+          const [loopCopyStart, loopCopyEnd] = copyAtomicSegment(origSegStart, origSegEnd)
+          addEpsilon(loopStart, loopCopyStart)
+          addEpsilon(loopCopyEnd, loopStart)
+          addEpsilon(loopCopyEnd, loopEnd)
+          if (min === 0) {
+            addEpsilon(loopStart, loopEnd)
+          }
+          addEpsilon(currentEnd, loopStart)
+          if (min === 0) {
+            segStart = loopStart
+          }
+          segEnd = loopEnd
+        } else if (max > min) {
+          for (let i = 0; i < max - min; i++) {
+            const optStart = newState()
+            const optEnd = newState()
+            const [copyStart, copyEnd] = copyAtomicSegment(origSegStart, origSegEnd)
+            addEpsilon(optStart, copyStart)
+            addEpsilon(copyEnd, optEnd)
+            addEpsilon(optStart, optEnd)
+            addEpsilon(currentEnd, optStart)
+            currentEnd = optEnd
+          }
+          segEnd = currentEnd
+        } else {
+          segEnd = currentEnd
+        }
+
         if (pos < pattern.length && pattern[pos] === '?') pos++ // lazy
       }
 
@@ -177,7 +263,7 @@ export function buildNFA(pattern: string): { states: StateNode[]; startState: nu
   return { states, startState, acceptStates: [acceptState] }
 }
 
-function epsilonClosure(states: StateNode[], stateId: number): Set<number> {
+function epsilonClosure(states: StateNode[], stateId: number, isAtStart: boolean = false, isAtEnd: boolean = false): Set<number> {
   const closure = new Set<number>([stateId])
   const stack = [stateId]
   while (stack.length) {
@@ -188,13 +274,39 @@ function epsilonClosure(states: StateNode[], stateId: number): Set<number> {
         stack.push(next)
       }
     }
+    for (const [sym, targets] of states[s].transitions) {
+      if (sym === '__anchor_start' && isAtStart) {
+        for (const t of targets) {
+          if (!closure.has(t)) {
+            closure.add(t)
+            stack.push(t)
+          }
+        }
+      }
+      if (sym === '__anchor_end' && isAtEnd) {
+        for (const t of targets) {
+          if (!closure.has(t)) {
+            closure.add(t)
+            stack.push(t)
+          }
+        }
+      }
+    }
   }
   return closure
 }
 
-function matchTransition(state: StateNode, symbol: string): number[] {
+function matchTransition(state: StateNode, symbol: string, isAtStart: boolean = false, isAtEnd: boolean = false): number[] {
   const results: number[] = []
   for (const [sym, targets] of state.transitions) {
+    if (sym === '__anchor_start') {
+      if (isAtStart) results.push(...targets)
+      continue
+    }
+    if (sym === '__anchor_end') {
+      if (isAtEnd) results.push(...targets)
+      continue
+    }
     if (sym === symbol) { results.push(...targets); continue }
     if (sym === '__dot' && symbol !== '\n') { results.push(...targets); continue }
     if (sym === '__digit' && /\d/.test(symbol)) { results.push(...targets); continue }
@@ -216,7 +328,7 @@ export function runMatch(states: StateNode[], startState: number, input: string)
 
   // Try to match from each position
   for (let startPos = 0; startPos <= input.length; startPos++) {
-    let currentStates = Array.from(epsilonClosure(states, startState))
+    let currentStates = Array.from(epsilonClosure(states, startState, startPos === 0, startPos === input.length))
     let matched = false
     let matchEnd = startPos
 
@@ -228,7 +340,7 @@ export function runMatch(states: StateNode[], startState: number, input: string)
       for (const s of currentStates) {
         const targets = matchTransition(states[s], char)
         for (const t of targets) {
-          const closure = epsilonClosure(states, t)
+          const closure = epsilonClosure(states, t, false, i + 1 === input.length)
           for (const c of closure) {
             if (!seen.has(c)) {
               seen.add(c)

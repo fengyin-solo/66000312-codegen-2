@@ -15,6 +15,7 @@ function getDefaultGroups(): TestCaseGroup[] {
       id: generateId(),
       name: '邮箱地址测试',
       description: '验证邮箱正则表达式的各种场景',
+      pattern: '^([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\\.([a-zA-Z]{2,})$',
       testCases: [
         {
           id: generateId(),
@@ -60,6 +61,7 @@ function getDefaultGroups(): TestCaseGroup[] {
       id: generateId(),
       name: '日期格式测试',
       description: '验证YYYY-MM-DD日期格式',
+      pattern: '^(\\d{4})-(\\d{2})-(\\d{2})$',
       testCases: [
         {
           id: generateId(),
@@ -97,6 +99,7 @@ function getDefaultGroups(): TestCaseGroup[] {
       id: generateId(),
       name: '手机号码测试',
       description: '验证中国大陆手机号格式',
+      pattern: '^1[3-9]\\d{9}$',
       testCases: [
         {
           id: generateId(),
@@ -136,7 +139,11 @@ function loadFromStorage(): TestCaseGroup[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) {
-      return JSON.parse(stored)
+      const data = JSON.parse(stored)
+      return data.map((group: any) => ({
+        ...group,
+        pattern: group.pattern || ''
+      }))
     }
   } catch (e) {
     console.error('Failed to load test cases from storage:', e)
@@ -188,11 +195,12 @@ export const useTestCasesStore = defineStore('testCases', () => {
     selectedGroupId.value = groupId
   }
 
-  function addGroup(name: string, description?: string) {
+  function addGroup(name: string, description?: string, pattern: string = '') {
     const newGroup: TestCaseGroup = {
       id: generateId(),
       name,
       description,
+      pattern,
       testCases: []
     }
     groups.value.push(newGroup)
@@ -201,11 +209,14 @@ export const useTestCasesStore = defineStore('testCases', () => {
     return newGroup
   }
 
-  function updateGroup(groupId: string, name: string, description?: string) {
+  function updateGroup(groupId: string, name: string, description?: string, pattern?: string) {
     const group = groups.value.find(g => g.id === groupId)
     if (group) {
       group.name = name
       group.description = description
+      if (pattern !== undefined) {
+        group.pattern = pattern
+      }
       saveGroups()
     }
   }
@@ -321,7 +332,7 @@ export const useTestCasesStore = defineStore('testCases', () => {
     }
   }
 
-  async function runAllTests(pattern: string, selectedGroupIds?: string[]) {
+  async function runAllTests(selectedGroupIds?: string[]) {
     isRunning.value = true
     testResults.value = []
 
@@ -332,7 +343,7 @@ export const useTestCasesStore = defineStore('testCases', () => {
     for (const group of groupsToRun) {
       for (const testCase of group.testCases) {
         await new Promise(resolve => setTimeout(resolve, 50))
-        const result = runTestCase(pattern, testCase)
+        const result = runTestCase(group.pattern, testCase)
         testResults.value.push(result)
       }
     }
@@ -340,7 +351,7 @@ export const useTestCasesStore = defineStore('testCases', () => {
     isRunning.value = false
   }
 
-  async function runGroupTests(pattern: string, groupId: string) {
+  async function runGroupTests(groupId: string) {
     isRunning.value = true
     testResults.value = []
 
@@ -348,7 +359,7 @@ export const useTestCasesStore = defineStore('testCases', () => {
     if (group) {
       for (const testCase of group.testCases) {
         await new Promise(resolve => setTimeout(resolve, 50))
-        const result = runTestCase(pattern, testCase)
+        const result = runTestCase(group.pattern, testCase)
         testResults.value.push(result)
       }
     }
