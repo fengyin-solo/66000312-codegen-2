@@ -5,7 +5,37 @@
       <p class="text-sm text-slate-500 mt-1">NFA 状态机可视化 · 逐步匹配高亮 · 分组捕获 · 回溯追踪</p>
     </header>
 
-    <div class="flex flex-col lg:flex-row gap-4 p-4">
+    <div class="px-4 pt-4">
+      <div class="flex gap-1 bg-slate-800 rounded-lg p-1 inline-flex">
+        <button
+          @click="activeTab = 'debugger'"
+          :class="[
+            'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+            activeTab === 'debugger'
+              ? 'bg-cyan-600 text-white'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+          ]"
+        >
+          🔍 可视化调试
+        </button>
+        <button
+          @click="activeTab = 'testbench'"
+          :class="[
+            'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+            activeTab === 'testbench'
+              ? 'bg-cyan-600 text-white'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+          ]"
+        >
+          🧪 批量测试工作台
+          <span v-if="testCasesStore.failedCount > 0" class="ml-1 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold bg-red-500 text-white rounded-full">
+            {{ testCasesStore.failedCount }}
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <div v-show="activeTab === 'debugger'" class="flex flex-col lg:flex-row gap-4 p-4">
       <div class="lg:w-1/4 space-y-4">
         <RegexEditor />
         <TemplateLibrary />
@@ -54,17 +84,26 @@
         </div>
       </div>
     </div>
+
+    <div v-show="activeTab === 'testbench'" class="p-4">
+      <TestBench />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRegexStore } from './store/regex'
+import { useTestCasesStore } from './store/testCases'
 import RegexEditor from './components/RegexEditor.vue'
 import NfaVisualizer from './components/NfaVisualizer.vue'
 import MatchHighlight from './components/MatchHighlight.vue'
 import TemplateLibrary from './components/TemplateLibrary.vue'
+import TestBench from './components/TestBench.vue'
 
 const store = useRegexStore()
+const testCasesStore = useTestCasesStore()
+const activeTab = ref<'debugger' | 'testbench'>('debugger')
+
 onMounted(() => store.execute())
 </script>

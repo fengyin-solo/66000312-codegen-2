@@ -55,3 +55,30 @@ export interface ASTNode {
   children?: ASTNode[]
   groupIndex?: number
 }
+
+export interface TestCase {
+  id: string
+  name: string
+  input: string
+  expectedResult: 'match' | 'no-match'
+  expectedMatch?: string
+  description?: string
+}
+
+export interface TestCaseGroup {
+  id: string
+  name: string
+  description?: string
+  testCases: TestCase[]
+}
+
+export interface TestCaseResult {
+  testCaseId: string
+  testCaseName: string
+  input: string
+  expectedResult: 'match' | 'no-match'
+  expectedMatch?: string
+  actualResult: MatchResult
+  passed: boolean
+  failureReason?: string
+}

@@ -28,14 +28,14 @@ export const TEMPLATES: RegexTemplate[] = [
   { name: '时间格式', pattern: '^([01]?\\d|2[0-3]):([0-5]\\d)(?::([0-5]\\d))?$', description: 'HH:MM或HH:MM:SS', testString: '14:30 23:59:59 00:00', category: '常用' }
 ]
 
-interface StateNode {
+export interface StateNode {
   id: number
   isAccept: boolean
   transitions: Map<string, number[]>
   epsilonTransitions: number[]
 }
 
-function buildNFA(pattern: string): { states: StateNode[]; startState: number; acceptStates: number[] } {
+export function buildNFA(pattern: string): { states: StateNode[]; startState: number; acceptStates: number[] } {
   const states: StateNode[] = []
   let stateCounter = 0
   let pos = 0
@@ -208,7 +208,7 @@ function matchTransition(state: StateNode, symbol: string): number[] {
   return results
 }
 
-function runMatch(states: StateNode[], startState: number, input: string): MatchResult {
+export function runMatch(states: StateNode[], startState: number, input: string): MatchResult {
   const steps: MatchStep[] = []
   let backtracks = 0
   let stepIndex = 0
